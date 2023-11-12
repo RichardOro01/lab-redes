@@ -1,34 +1,58 @@
-#import socket module
-from socket import *
-import sys # In order to terminate the program
+"""Web server."""
+from socket import socket, AF_INET, SOCK_STREAM
+
 serverSocket = socket(AF_INET, SOCK_STREAM)
-#Prepare a sever socket
-#Fill in start
-#Fill in end
-while True:
-    #Establish the connection
-    print('Ready to serve...')
-    connectionSocket, addr = #Fill in start #Fill in end 
+PORT = 80
+SRC = 'page'
+serverSocket.bind(("127.0.0.1", PORT))
+serverSocket.listen(1)
+
+
+def is_socket_alive(sock):
+    """Check if socket connection is alive"""
     try:
-        message = #Fill in start #Fill in end 
-        filename = message.split()[1] 
-        f = open(filename[1:]) 
-        outputdata = #Fill in start #Fill in end 
-        #Send one HTTP header line into socket
-        #Fill in start
-        #Fill in end 
-        #Send the content of the requested file to the client
-        for i in range(0, len(outputdata)): 
-            connectionSocket.send(outputdata[i].encode())
-        connectionSocket.send("\r\n".encode())
-        connectionSocket.close()
+        sock.send(b'')
+        return True
+    except Exception:
+        return False
+
+
+def send_response(filename, connection_socket, e404=False):
+    """Send html respond. Throw 404 in not found case"""
+    try:
+        with open(filename, "r", encoding="utf-8") as file:
+            output_data = file.read(1024)
+            file.close()
+            connection_socket.send(
+                f'HTTP/1.1 {"404 Not Found" if e404 else ""} \r\n\r\n'.encode())
+            for _, data in enumerate(output_data):
+                connection_socket.send(data.encode())
+            connection_socket.send("\r\n".encode())
     except IOError:
-        pass
-        #Send response message for file not found
-        #Fill in start 
-        #Fill in end
-        #Close client socket
-        #Fill in start
-        #Fill in end 
-    serverSocket.close()
-    sys.exit()#Terminate the program after sending the corresponding data
+        if is_socket_alive(connection_socket):
+            send_response(f"{SRC}/404.html", connection_socket, True)
+        connection_socket.close()
+
+
+def server():
+    """Start server to listen"""
+    try:
+        while True:
+            print('Ready to serve...')
+            connection_socket, _ = serverSocket.accept()
+            message = connection_socket.recv(1024).decode()
+            message = message.split()
+            if len(message) >= 1:
+                filename = message[1]
+                if filename == '/':
+                    filename = f"{SRC}/index.html"
+                else:
+                    filename = f"{SRC}{filename}.html"
+                send_response(filename, connection_socket)
+            connection_socket.close()
+    except KeyboardInterrupt:
+        connection_socket.close()
+        print("\nServidor cerrado!")
+
+
+server()
