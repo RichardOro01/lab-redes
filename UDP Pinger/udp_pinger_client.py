@@ -1,24 +1,26 @@
-# UDPPingerClient.py
+"""UDPPingerClient.py"""
 import socket
 import time
 
 # Ip y puerto del servidor
-server_ip = "127.0.0.1"
-server_port = 12000
+SERVER_IP = "127.0.0.1"
+SERVER_PORT = 12000
+PING_AMOUNT = 10
 
 # Tiempo de espera para la respuesta del servidor
-timeout = 1
+TIMEOUT = 1
 
 # Inicializar el socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+client_socket.settimeout(TIMEOUT)
 
 # Enviar 10 mensajes ping al servidor
-for sequence_number in range(1, 11):
+for sequence_number in range(1, PING_AMOUNT+1):
     # Generar el mensaje ping
-    message = "Ping {} {}".format(sequence_number, time.time())
+    message = f"Ping {sequence_number} {time.time()}"
 
     # Enviar el mensaje ping al servidor
-    client_socket.sendto(message.encode("utf-8"), (server_ip, server_port))
+    client_socket.sendto(message.encode("utf-8"), (SERVER_IP, SERVER_PORT))
 
     try:
         # Recibir la respuesta del servidor
@@ -34,7 +36,7 @@ for sequence_number in range(1, 11):
     print(response.decode("utf-8"))
 
     # Imprimir el tiempo de ida y vuelta (RTT)
-    print("RTT: {} segundos".format(rtt))
+    print(f"RTT: {rtt} segundos")
 
 # Cerrar el socket UDP
 client_socket.close()
