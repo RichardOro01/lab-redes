@@ -29,9 +29,7 @@ def send_response(filename, connection_socket, e404=False):
             file.close()
             connection_socket.send(
                 f'HTTP/1.1 {"404 Not Found" if e404 else ""} \r\n\r\n'.encode())
-            for _, data in enumerate(output_data):
-                connection_socket.send(data.encode())
-            connection_socket.send("\r\n".encode())
+            connection_socket.sendall(output_data.encode())
     except IOError:
         if is_socket_alive(connection_socket):
             send_response(f"{SRC}/404.html", connection_socket, True)
