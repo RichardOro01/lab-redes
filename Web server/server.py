@@ -1,6 +1,8 @@
 """Web server."""
 from socket import socket, AF_INET, SOCK_STREAM
 import threading
+import time
+import sys
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
 PORT = 8080
@@ -39,6 +41,7 @@ def send_response(filename, connection_socket, e404=False):
 def handel_client(connection_socket, address):
     """Handle client in a new thread"""
     print(f"Client connected from: {address[0]}:{address[1]}")
+    time.sleep(3)
     message = connection_socket.recv(1024).decode()
     message = message.split()
     if len(message) >= 1:
@@ -54,6 +57,7 @@ def handel_client(connection_socket, address):
 
 def start_server():
     """Start server to listen"""
+    connection_socket = None
     try:
         while True:
             print('Ready to serve...')
@@ -62,8 +66,11 @@ def start_server():
                                               args=(connection_socket, address))
             client_handler.start()
     except KeyboardInterrupt:
-        connection_socket.close()
+        if connection_socket and is_socket_alive(connection_socket):
+            connection_socket.close()
+        serverSocket.close()
         print("\nClosed server!")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
