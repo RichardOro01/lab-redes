@@ -1,8 +1,9 @@
 """Web server."""
 from socket import socket, AF_INET, SOCK_STREAM
+import threading
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
-PORT = 80
+PORT = 8080
 SRC = 'page'
 serverSocket.bind(("127.0.0.1", PORT))
 serverSocket.listen(1)
@@ -19,6 +20,7 @@ def is_socket_alive(sock):
 
 def send_response(filename, connection_socket, e404=False):
     """Send html respond. Throw 404 in not found case"""
+
     try:
         with open(filename, "r", encoding="utf-8") as file:
             output_data = file.read(1024)
@@ -34,25 +36,35 @@ def send_response(filename, connection_socket, e404=False):
         connection_socket.close()
 
 
-def server():
+def handel_client(connection_socket, address):
+    """Handle client in a new thread"""
+    print(f"Client connected from: {address[0]}:{address[1]}")
+    message = connection_socket.recv(1024).decode()
+    message = message.split()
+    if len(message) >= 1:
+        filename = message[1]
+        if filename == '/':
+            filename = f"{SRC}/index.html"
+        else:
+            filename = f"{SRC}{filename}.html"
+        send_response(filename, connection_socket)
+    connection_socket.close()
+    print(f"Connection finished from: {address[0]}:{address[1]}")
+
+
+def start_server():
     """Start server to listen"""
     try:
         while True:
             print('Ready to serve...')
-            connection_socket, _ = serverSocket.accept()
-            message = connection_socket.recv(1024).decode()
-            message = message.split()
-            if len(message) >= 1:
-                filename = message[1]
-                if filename == '/':
-                    filename = f"{SRC}/index.html"
-                else:
-                    filename = f"{SRC}{filename}.html"
-                send_response(filename, connection_socket)
-            connection_socket.close()
+            connection_socket, address = serverSocket.accept()
+            client_handler = threading.Thread(target=handel_client,
+                                              args=(connection_socket, address))
+            client_handler.start()
     except KeyboardInterrupt:
         connection_socket.close()
-        print("\nServidor cerrado!")
+        print("\nClosed server!")
 
 
-server()
+if __name__ == "__main__":
+    start_server()
