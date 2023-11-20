@@ -18,10 +18,11 @@ for sequence_number in range(1, PING_AMOUNT+1):
     try:
         response, address = client_socket.recvfrom(1024)
     except socket.timeout:
-        print(f"{sequence_number}: Se agotó el tiempo de espera de la solicitud")
+        print(
+            f"Ping: {sequence_number}: Se agotó el tiempo de espera de la solicitud")
         continue
     rtt = time.time() - request_time
-    print(f"{sequence_number}: RTT: {rtt} ms")
+    print(f"Ping {sequence_number}: RTT: {rtt} ms")
     packets_received = packets_received + 1
 
 print(f'Packets sended: {PING_AMOUNT}')
