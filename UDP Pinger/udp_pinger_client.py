@@ -22,7 +22,7 @@ for sequence_number in range(1, PING_AMOUNT+1):
             f"Ping: {sequence_number}: Se agotó el tiempo de espera de la solicitud")
         continue
     rtt = time.time() - request_time
-    print(f"Ping {sequence_number}: RTT: {rtt} ms")
+    print(f"Ping: {sequence_number}: RTT: {rtt} ms")
     packets_received = packets_received + 1
 
 print(f'Packets sended: {PING_AMOUNT}')
