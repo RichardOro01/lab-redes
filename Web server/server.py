@@ -36,7 +36,7 @@ def send_response(filename, connection_socket, e404=False):
         connection_socket.close()
 
 
-def handel_client(connection_socket, address):
+def handle_client(connection_socket, address):
     """Handle client in a new thread"""
     print(f"Client connected from: {address[0]}:{address[1]}")
     time.sleep(3)
@@ -60,7 +60,7 @@ def start_server():
         while True:
             print('Ready to serve...')
             connection_socket, address = serverSocket.accept()
-            client_handler = threading.Thread(target=handel_client,
+            client_handler = threading.Thread(target=handle_client,
                                               args=(connection_socket, address))
             client_handler.start()
     except KeyboardInterrupt:

@@ -15,7 +15,7 @@ while True:
     message, address = serverSocket.recvfrom(1024)
     message = message.upper()
     if rand < 4:
-        print('Packet loss')
+        print('Packet lost')
         continue
     serverSocket.sendto(message, address)
     print(f"ping sended to {address[0]}:{address[1]}")

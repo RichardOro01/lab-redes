@@ -26,6 +26,6 @@ for sequence_number in range(1, PING_AMOUNT+1):
 
 print(f'Packets sended: {PING_AMOUNT}')
 print(f'Packets received: {packets_received}')
-print(f'Packet loss: {(PING_AMOUNT-packets_received)/PING_AMOUNT}%')
+print(f'Packet lost: {(PING_AMOUNT-packets_received)/PING_AMOUNT}%')
 
 client_socket.close()
