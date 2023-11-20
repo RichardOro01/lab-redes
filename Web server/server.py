@@ -31,8 +31,15 @@ def send_response(filename, connection_socket, e404=False):
                 f'HTTP/1.1 {"404 Not Found" if e404 else ""} \r\n\r\n'.encode())
             connection_socket.sendall(output_data.encode())
     except IOError:
-        if is_socket_alive(connection_socket):
-            send_response(f"{SRC}/404.html", connection_socket, True)
+        if not e404:
+            if is_socket_alive(connection_socket):
+                send_response(f"{SRC}/404.html", connection_socket, True)
+        else:
+            print(
+                "No such file 404.html, ensure you are running on root web server directory")
+            if is_socket_alive(connection_socket):
+                connection_socket.send(
+                    'HTTP/1.1 404 Not Found \r\n\r\n'.encode())
         connection_socket.close()
 
 
