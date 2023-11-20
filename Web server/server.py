@@ -28,7 +28,7 @@ def send_response(filename, connection_socket, e404=False):
             output_data = file.read(1024)
             file.close()
             connection_socket.sendall(
-                f'HTTP/1.1 {"404 Not Found" if e404 else ""} \r\n\r\n{output_data}'.encode())
+                f'HTTP/1.1\r\n{"404 Not Found" if e404 else ""} \r\n\r\n{output_data}'.encode())
     except IOError:
         if not e404:
             if is_socket_alive(connection_socket):
