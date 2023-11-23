@@ -30,7 +30,12 @@ def make_request(server_name, server_port, file):
     request = f"GET /{file} HTTP/1.1\r\nHost: {server_name}:{server_port}\r\n\r\n"
     client_socket.sendall(request.encode())
     print(f'Waiting for response from {server_name}:{server_port}')
-    response = client_socket.recv(2048)
+    response = b""
+    while True:
+        packet_response = client_socket.recv(2048)
+        if len(packet_response) == 0:
+            break
+        response += packet_response
     print('From Server: ', response.decode())
     client_socket.close()
 
