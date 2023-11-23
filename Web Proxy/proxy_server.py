@@ -4,6 +4,7 @@ import sys
 import re
 import os
 import threading
+import ssl
 
 PORT = 8888
 WEB_SERVER_DEFAULT_PORT = 80
@@ -28,7 +29,7 @@ def verify_params():
         sys.exit(2)
 
 
-def create_directory_if_not_exists(directory):
+def create_directory_if_not_exists(directory: str):
     """
     Create a directory if it does not already exist.
 
@@ -43,7 +44,7 @@ def create_directory_if_not_exists(directory):
         os.makedirs(directory)
 
 
-def validate_ip(ip):
+def validate_ip(ip: str):
     """
     Validates an IP address.
 
@@ -92,32 +93,50 @@ def init_socket():
         sys.exit(2)
 
 
-def handle_get(tcp_client_socket, split_message):
+def destructure_url(url: str):
+    temp = url
+    http_pos = url.find("://")
+    if http_pos == -1:
+        temp = url
+    else:
+        temp = url[(http_pos+3):]
+    web_server_pos = temp.find("/")
+    file_name = ""
+    if web_server_pos == -1:
+        web_server_pos = len(temp)
+    else:
+        file_name = temp[web_server_pos:]
+    port_pos = temp.find(":")
+    web_server = ""
+    port = -1
+    if (port_pos == -1 or web_server_pos < port_pos):
+        port = WEB_SERVER_DEFAULT_PORT
+        web_server = temp[:web_server_pos]
+
+    else:
+        port = int((temp[(port_pos+1):])[:web_server_pos-port_pos-1])
+        web_server = temp[:port_pos]
+    return (web_server, port, file_name)
+
+
+def handle_get(tcp_client_socket: socket, split_message: list):
     split_message[1] = split_message[1].strip("/")
-    url = split_message[1]
+    url: str = split_message[1]
     message = " ".join(split_message)
     print("Web Request: ", url)
-    pattern = r'(?P<scheme>.*?)://(?P<domain>.*?)/(?P<path>.*)'
-    match = re.match(pattern, url)
-    protocol = match.group("scheme")
-    host = match.group("domain")
-    filename = match.group("path")
-    print("Protocol: ", protocol)
-    print("Host: ", host)
-    host_partition = host.partition(":")
-    hostn = host_partition[0]
-    hostp = host_partition[2]
-    if hostp == "":
-        hostp = WEB_SERVER_DEFAULT_PORT
-    else:
-        hostp = int(hostp)
-    print("File name: ", filename)
+    url_destructured = destructure_url(url)
+    hostn = url_destructured[0]
+    hostp = url_destructured[1]
+    file_name = url_destructured[2]
+    print("Host name: ", hostn)
+    print("Port: ", hostp)
+    print("File name: ", file_name)
     file_exist = False
-    file_to_use = "/" + filename
-    print("File to use: ", file_to_use)
-    route = hostn
-    if file_to_use[1:] != "":
-        route = f"{hostn}/{filename}"
+    route = f"{hostn}/index"
+    if file_name == "":
+        file_name = "/"
+    if file_name[1:] != "":
+        route = f"{hostn}/{file_name}"
     try:
         with open(f"cache/{route}", "r", encoding="utf-8") as file:
             output_data = file.readlines()
@@ -134,11 +153,9 @@ def handle_get(tcp_client_socket, split_message):
                 web_socket.connect((hostn, hostp))
                 print("Sending request to web server:")
                 print(message.encode())
-                web_socket.sendall(message.encode())
+                web_socket.sendall(
+                    f"GET {file_name} HTTP/1.1\r\nHost: {hostn}:{hostp}\r\n\r\n".encode())
                 print("Receiving response from web server and sending to client")
-                route = hostn
-                if filename != "":
-                    route = f"{hostn}/{filename}"
                 create_directory_if_not_exists(
                     f"cache/{hostn}")
                 has_response = False
@@ -163,12 +180,13 @@ def handle_get(tcp_client_socket, split_message):
             tcp_client_socket.sendall(response.encode())
 
 
-def handle_connect(tcp_client_socket, split_message):
-    host = split_message[1]
-    message = " ".join(split_message)
+def handle_connect(tcp_client_socket: socket, split_message: list):
+    context = ssl.create_default_context()
+    host: str = split_message[1]
     host_partition = host.partition(":")
     hostn = host_partition[0]
     hostp = host_partition[2]
+    has_ssl = False
     if hostp == "":
         hostp = WEB_SERVER_DEFAULT_PORT
     else:
@@ -176,13 +194,19 @@ def handle_connect(tcp_client_socket, split_message):
     web_socket = socket(AF_INET, SOCK_STREAM)
     print(f"Connecting with {host}:")
     web_socket.connect((hostn, hostp))
+    current_socket = web_socket
+    if hostp == 443:
+        print("Creating a SSL connection")
+        current_socket = context.wrap_socket(web_socket, server_hostname=hostn)
+        has_ssl = True
+    message = " ".join(split_message)
     print("Sending request to web server:")
     print(message.encode())
-    web_socket.sendall(message.encode())
+    current_socket.sendall(message.encode())
     print("Receiving response from web server and sending to client")
     response = b""
     while True:
-        buffer = web_socket.recv(1024)
+        buffer = current_socket.recv(1024)
         if len(buffer) == 0:
             break
         response += buffer
@@ -192,9 +216,12 @@ def handle_connect(tcp_client_socket, split_message):
         print(response.decode())
     else:
         print("Response not sended to client")
+    current_socket.close()
+    if has_ssl:
+        web_socket.close()
 
 
-def handle_connection(tcp_client_socket, addr):
+def handle_connection(tcp_client_socket: socket, addr: tuple):
     try:
         print(f'Received a connection from: {addr[0]}:{addr[1]}')
         message = tcp_client_socket.recv(1024)
@@ -211,7 +238,7 @@ def handle_connection(tcp_client_socket, addr):
         print(error)
 
 
-def start_server(tcp_server_socket):
+def start_server(tcp_server_socket: socket):
     """
     Function to start the server and handle incoming client requests.
 

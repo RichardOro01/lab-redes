@@ -23,13 +23,16 @@ def is_socket_alive(sock):
 def send_response(filename, connection_socket, e404=False):
     """Send html respond. Throw 404 in not found case"""
 
+    print("Sending response. File name: ", filename)
     try:
         with open(filename, "r", encoding="utf-8") as file:
             output_data = file.read(1024)
             file.close()
             connection_socket.sendall(
                 f'HTTP/1.1 {"404 Not Found" if e404 else "200 Ok"} \r\n\r\n{output_data}'.encode())
-    except IOError:
+            print("Data sended")
+    except IOError as error:
+        print(error)
         if not e404:
             if is_socket_alive(connection_socket):
                 send_response(f"{SRC}/404.html", connection_socket, True)
@@ -42,11 +45,12 @@ def send_response(filename, connection_socket, e404=False):
         connection_socket.close()
 
 
-def handle_client(connection_socket, address):
+def handle_client(connection_socket: socket, address: tuple):
     """Handle client in a new thread"""
     print(f"Client connected from: {address[0]}:{address[1]}")
     time.sleep(3)
     message = connection_socket.recv(1024).decode()
+    print("Request: ", message)
     message = message.split()
     if len(message) >= 1:
         filename = message[1]
