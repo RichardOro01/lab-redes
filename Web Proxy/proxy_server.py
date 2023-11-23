@@ -163,7 +163,9 @@ def handle_get(tcp_client_socket, split_message):
             tcp_client_socket.sendall(response.encode())
 
 
-def handle_connect(tcp_client_socket, host):
+def handle_connect(tcp_client_socket, split_message):
+    host = split_message[1]
+    message = " ".join(split_message)
     host_partition = host.partition(":")
     hostn = host_partition[0]
     hostp = host_partition[2]
@@ -174,10 +176,22 @@ def handle_connect(tcp_client_socket, host):
     web_socket = socket(AF_INET, SOCK_STREAM)
     print(f"Connecting with {host}:")
     web_socket.connect((hostn, hostp))
-    print("Connected")
-    print("Sending response OK to client")
-    tcp_client_socket.sendall(b"HTTP/1.1 200 Ok \r\n\r\n")
-    print("Response sended to client")
+    print("Sending request to web server:")
+    print(message.encode())
+    web_socket.sendall(message.encode())
+    print("Receiving response from web server and sending to client")
+    response = b""
+    while True:
+        buffer = web_socket.recv(1024)
+        if len(buffer) == 0:
+            break
+        response += buffer
+        tcp_client_socket.sendall(buffer)
+    if response != b"":
+        print("Response sended to client")
+        print(response.decode())
+    else:
+        print("Response not sended to client")
 
 
 def handle_connection(tcp_client_socket, addr):
@@ -191,7 +205,7 @@ def handle_connection(tcp_client_socket, addr):
         if split_message[0] == "GET":
             handle_get(tcp_client_socket, split_message)
         elif split_message[0] == "CONNECT":
-            handle_connect(tcp_client_socket, split_message[1])
+            handle_connect(tcp_client_socket, split_message)
         tcp_client_socket.close()
     except Exception as error:
         print(error)
