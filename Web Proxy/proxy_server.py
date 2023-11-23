@@ -3,9 +3,10 @@ from socket import socket, AF_INET, SOCK_STREAM
 import sys
 import re
 import os
+import threading
 
 PORT = 8888
-WEB_SERVER_PORT = 80
+WEB_SERVER_DEFAULT_PORT = 80
 
 
 def verify_params():
@@ -38,6 +39,7 @@ def create_directory_if_not_exists(directory):
         None
     """
     if not os.path.exists(directory):
+        print(f"Creating directory: {directory}")
         os.makedirs(directory)
 
 
@@ -90,6 +92,111 @@ def init_socket():
         sys.exit(2)
 
 
+def handle_get(tcp_client_socket, split_message):
+    split_message[1] = split_message[1].strip("/")
+    url = split_message[1]
+    message = " ".join(split_message)
+    print("Web Request: ", url)
+    pattern = r'(?P<scheme>.*?)://(?P<domain>.*?)/(?P<path>.*)'
+    match = re.match(pattern, url)
+    protocol = match.group("scheme")
+    host = match.group("domain")
+    filename = match.group("path")
+    print("Protocol: ", protocol)
+    print("Host: ", host)
+    host_partition = host.partition(":")
+    hostn = host_partition[0]
+    hostp = host_partition[2]
+    if hostp == "":
+        hostp = WEB_SERVER_DEFAULT_PORT
+    else:
+        hostp = int(hostp)
+    print("File name: ", filename)
+    file_exist = False
+    file_to_use = "/" + filename
+    print("File to use: ", file_to_use)
+    route = hostn
+    if file_to_use[1:] != "":
+        route = f"{hostn}/{filename}"
+    try:
+        with open(f"cache/{route}", "r", encoding="utf-8") as file:
+            output_data = file.readlines()
+            file_exist = True
+            response = "HTTP/1.0 200 OK\r\nContent-Type:text/html\r\n"
+            response += "\r\n".join(output_data)
+            tcp_client_socket.sendall(response.encode())
+            print('Read from cache')
+    except IOError:
+        if not file_exist:
+            web_socket = socket(AF_INET, SOCK_STREAM)
+            print(f"Connecting to {hostn}:{hostp}")
+            try:
+                web_socket.connect((hostn, hostp))
+                print("Sending request to web server:")
+                print(message.encode())
+                web_socket.sendall(message.encode())
+                print("Receiving response from web server and sending to client")
+                route = hostn
+                if filename != "":
+                    route = f"{hostn}/{filename}"
+                create_directory_if_not_exists(
+                    f"cache/{hostn}")
+                has_response = False
+                with open(f"cache/{route}", "wb") as tmp_file:
+                    while True:
+                        buffer = web_socket.recv(1024)
+                        if len(buffer) == 0:
+                            tmp_file.close()
+                            break
+                        has_response = True
+                        tmp_file.write(buffer)
+                        tcp_client_socket.sendall(buffer)
+                if has_response:
+                    print("Response sended to client")
+                else:
+                    print("Response not sended to client")
+            except Exception as error:
+                print("Illegal request")
+                print(error)
+        else:
+            response = "HTTP/1.0 404 Not Found\r\nContent-Type:text/html\r\n\r\n\r\n404 Not Found"
+            tcp_client_socket.sendall(response.encode())
+
+
+def handle_connect(tcp_client_socket, host):
+    host_partition = host.partition(":")
+    hostn = host_partition[0]
+    hostp = host_partition[2]
+    if hostp == "":
+        hostp = WEB_SERVER_DEFAULT_PORT
+    else:
+        hostp = int(hostp)
+    web_socket = socket(AF_INET, SOCK_STREAM)
+    print(f"Connecting with {host}:")
+    web_socket.connect((hostn, hostp))
+    print("Connected")
+    print("Sending response OK to client")
+    tcp_client_socket.sendall(b"HTTP/1.1 200 Ok \r\n\r\n")
+    print("Response sended to client")
+
+
+def handle_connection(tcp_client_socket, addr):
+    try:
+        print(f'Received a connection from: {addr[0]}:{addr[1]}')
+        message = tcp_client_socket.recv(1024)
+        print("Request: ", message)
+        message = message.decode()
+        split_message = message.split(" ")
+        print("Type: ", split_message[0])
+        if split_message[0] == "GET":
+            handle_get(tcp_client_socket, split_message)
+        elif split_message[0] == "CONNECT":
+            handle_connect(tcp_client_socket, split_message[1])
+        tcp_client_socket.close()
+    except Exception as error:
+        print(error)
+
+
 def start_server(tcp_server_socket):
     """
     Function to start the server and handle incoming client requests.
@@ -103,51 +210,10 @@ def start_server(tcp_server_socket):
         while True:
             print(f'Ready to serve on {sys.argv[1]}:{PORT}...')
             tcp_client_socket, addr = tcp_server_socket.accept()
-            print(f'Received a connection from: {addr[0]}:{addr[1]}')
-            message = tcp_client_socket.recv(1024)
-            print("Request: ", message)
-            message = message.decode()
-            web_request = message.split()[1]
-            web_request = web_request.strip("/")
-            print("Web Request: ", web_request)
-            request_partition = web_request.partition("/")
-            filename = request_partition[2]
-            hostn = request_partition[0]
-            print("File name: ", filename)
-            file_exist = False
-            file_to_use = "/" + filename
-            print("File to use: ", file_to_use)
-            try:
-                with open(f"cache/{hostn}/{file_to_use[1:]}", "r", encoding="utf-8") as file:
-                    output_data = file.readlines()
-                    file_exist = True
-                    response = "HTTP/1.0 200 OK\r\nContent-Type:text/html\r\n"
-                    response += "\r\n".join(output_data)
-                    tcp_client_socket.sendall(response.encode())
-                    print('Read from cache')
-            except IOError:
-                if not file_exist:
-                    web_socket = socket(AF_INET, SOCK_STREAM)
-                    print(f"Connecting to {hostn}:{WEB_SERVER_PORT}")
-                    try:
-                        web_socket.connect((hostn, WEB_SERVER_PORT))
-                        web_socket.sendall(
-                            f"GET http://{filename} HTTP/1.0\n\n".encode())
-                        while True:
-                            buffer = web_socket.recv(1024)
-                            if len(buffer) == 0:
-                                break
-                            create_directory_if_not_exists(f"cache/{hostn}")
-                            with open(f"cache/{hostn}/{filename}", "wb") as tmp_file:
-                                tmp_file.write(buffer)
-                            tcp_client_socket.sendall(buffer)
-                    except Exception as error:
-                        print("Illegal request")
-                        print(error)
-                else:
-                    response = "HTTP/1.0 404 Not Found\r\nContent-Type:text/html\r\n\r\n\r\n404 Not Found"
-                    tcp_client_socket.sendall(response.encode())
-            tcp_client_socket.close()
+            connection_handler = threading.Thread(target=handle_connection,
+                                                  args=(tcp_client_socket, addr))
+            connection_handler.daemon = True
+            connection_handler.start()
     except InterruptedError:
         tcp_server_socket.close()
         print("Proxy closed")
