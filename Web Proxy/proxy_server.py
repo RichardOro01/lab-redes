@@ -221,6 +221,30 @@ def handle_connect(tcp_client_socket: socket, split_message: list):
         web_socket.close()
 
 
+def handle_other(client_socket: socket):
+    try:
+        print("Handling other")
+        destination_host, _, destination_port = client_socket.recv(
+            4096).decode().partition(":")
+        destination_port = int(destination_port)
+        destination_socket = socket(AF_INET, SOCK_STREAM)
+        destination_socket.connect((destination_host, destination_port))
+        while True:
+            data = client_socket.recv(4096)
+            if not data:
+                break
+            destination_socket.sendall(data)
+        while True:
+            data = destination_socket.recv(4096)
+            if not data:
+                break
+            client_socket.sendall(data)
+        destination_socket.close()
+    except Exception as error:
+        print("Error handler other request")
+        print(error)
+
+
 def handle_connection(tcp_client_socket: socket, addr: tuple):
     try:
         print(f'Received a connection from: {addr[0]}:{addr[1]}')
@@ -233,6 +257,8 @@ def handle_connection(tcp_client_socket: socket, addr: tuple):
             handle_get(tcp_client_socket, split_message)
         elif split_message[0] == "CONNECT":
             handle_connect(tcp_client_socket, split_message)
+        else:
+            handle_other(tcp_client_socket)
         tcp_client_socket.close()
     except Exception as error:
         print(error)
