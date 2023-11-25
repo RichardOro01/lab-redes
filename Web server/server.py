@@ -7,7 +7,13 @@ import sys
 serverSocket = socket(AF_INET, SOCK_STREAM)
 PORT = 8080
 SRC = 'page'
-serverSocket.bind(("127.0.0.1", PORT))
+DEFAULT_HOST = "127.0.0.1"
+
+host = DEFAULT_HOST
+if len(sys.argv) == 2:
+    host = sys.argv[1]
+
+serverSocket.bind((host, PORT))
 serverSocket.listen(1)
 
 

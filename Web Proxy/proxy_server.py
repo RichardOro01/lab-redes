@@ -5,6 +5,7 @@ import re
 import os
 import threading
 import ssl
+import time
 
 PORT = 8888
 WEB_SERVER_DEFAULT_PORT = 80
@@ -93,6 +94,23 @@ def init_socket():
         sys.exit(2)
 
 
+def parse_file_name(file_name: str):
+    return file_name.replace('?', '_query_').replace('/', '_slash_').replace('_slash_', '/', 1)
+
+
+def log(filename: str, log_str: str or bytes):
+    try:
+        if isinstance(log_str, bytes):
+            log_str = log_str.decode()
+        print(log_str)
+        create_directory_if_not_exists('logs')
+        with open(f'logs/{filename}', 'w', encoding='utf-8') as file:
+            file.write(log_str)
+            file.close()
+    except Exception as error:
+        print(f'Error logging. Reason: {error}')
+
+
 def destructure_url(url: str):
     temp = url
     http_pos = url.find("://")
@@ -132,11 +150,12 @@ def handle_get(tcp_client_socket: socket, split_message: list):
     print("Port: ", hostp)
     print("File name: ", file_name)
     file_exist = False
+    parsed_file_name = parse_file_name(file_name)
     route = f"{hostn}/index"
     if file_name == "":
         file_name = "/"
     if file_name[1:] != "":
-        route = f"{hostn}/{file_name}"
+        route = f"{hostn}{parsed_file_name}"
     try:
         with open(f"cache/{route}", "r", encoding="utf-8") as file:
             output_data = file.readlines()
@@ -148,6 +167,7 @@ def handle_get(tcp_client_socket: socket, split_message: list):
     except IOError:
         if not file_exist:
             web_socket = socket(AF_INET, SOCK_STREAM)
+            web_socket.settimeout(10)
             print(f"Connecting to {hostn}:{hostp}")
             try:
                 web_socket.connect((hostn, hostp))
@@ -181,18 +201,20 @@ def handle_get(tcp_client_socket: socket, split_message: list):
 
 
 def handle_connect(tcp_client_socket: socket, split_message: list):
+    now = time.time()
     context = ssl.create_default_context()
     host: str = split_message[1]
     host_partition = host.partition(":")
     hostn = host_partition[0]
     hostp = host_partition[2]
+    log_file = f'{hostn}_{str(now)}'
     has_ssl = False
     if hostp == "":
         hostp = WEB_SERVER_DEFAULT_PORT
     else:
         hostp = int(hostp)
     web_socket = socket(AF_INET, SOCK_STREAM)
-    print(f"Connecting with {host}:")
+    log(log_file, f"Connecting with {host}:")
     web_socket.connect((hostn, hostp))
     current_socket = web_socket
     if hostp == 443:
@@ -200,10 +222,10 @@ def handle_connect(tcp_client_socket: socket, split_message: list):
         current_socket = context.wrap_socket(web_socket, server_hostname=hostn)
         has_ssl = True
     message = " ".join(split_message)
-    print("Sending request to web server:")
-    print(message.encode())
+    log(log_file, "Sending request to web server:")
+    log(log_file, message.encode())
     current_socket.sendall(message.encode())
-    print("Receiving response from web server and sending to client")
+    log(log_file, "Receiving response from web server and sending to client")
     response = b""
     while True:
         buffer = current_socket.recv(1024)
@@ -212,10 +234,10 @@ def handle_connect(tcp_client_socket: socket, split_message: list):
         response += buffer
         tcp_client_socket.sendall(buffer)
     if response != b"":
-        print("Response sended to client")
-        print(response.decode())
+        log(log_file, "Response sended to client")
+        log(log_file, response.decode())
     else:
-        print("Response not sended to client")
+        log(log_file, "Response not sended to client")
     current_socket.close()
     if has_ssl:
         web_socket.close()
@@ -248,20 +270,26 @@ def handle_other(client_socket: socket):
 def handle_connection(tcp_client_socket: socket, addr: tuple):
     try:
         print(f'Received a connection from: {addr[0]}:{addr[1]}')
+        tcp_client_socket.settimeout(10)
         message = tcp_client_socket.recv(1024)
         print("Request: ", message)
         message = message.decode()
-        split_message = message.split(" ")
-        print("Type: ", split_message[0])
-        if split_message[0] == "GET":
-            handle_get(tcp_client_socket, split_message)
-        elif split_message[0] == "CONNECT":
-            handle_connect(tcp_client_socket, split_message)
-        else:
-            handle_other(tcp_client_socket)
+        if message != '':
+            split_message = message.split(" ")
+            print("Type: ", split_message[0])
+            if split_message[0] == "GET":
+                handle_get(tcp_client_socket, split_message)
+            elif split_message[0] == "CONNECT":
+                handle_connect(tcp_client_socket, split_message)
+                # tcp_client_socket.sendall(b'HTTP/1.1 200 Ok \r\n\r\n<html>')
+            else:
+                handle_other(tcp_client_socket)
         tcp_client_socket.close()
+        print(f'Finished connection from: {addr[0]}:{addr[1]}')
     except Exception as error:
-        print(error)
+        tcp_client_socket.close()
+        print(
+            f'Abort connection from: {addr[0]}:{addr[1]}. Reason: {error}')
 
 
 def start_server(tcp_server_socket: socket):
