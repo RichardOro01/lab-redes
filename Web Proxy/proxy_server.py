@@ -220,6 +220,7 @@ def handle_connect(tcp_client_socket: socket, split_message: list):
     if hostp == 443:
         print("Creating a SSL connection")
         current_socket = context.wrap_socket(web_socket, server_hostname=hostn)
+        current_socket.do_handshake()
         has_ssl = True
     message = " ".join(split_message)
     log(log_file, "Sending request to web server:")
@@ -281,7 +282,9 @@ def handle_connection(tcp_client_socket: socket, addr: tuple):
                 handle_get(tcp_client_socket, split_message)
             elif split_message[0] == "CONNECT":
                 handle_connect(tcp_client_socket, split_message)
-                # tcp_client_socket.sendall(b'HTTP/1.1 200 Ok \r\n\r\n<html>')
+
+                # tcp_client_socket.sendall(
+                #     f'HTTP/1.1 200 Connection established\r\n\r\n')
             else:
                 handle_other(tcp_client_socket)
         tcp_client_socket.close()
