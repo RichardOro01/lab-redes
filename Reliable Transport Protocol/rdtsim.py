@@ -42,6 +42,8 @@ import random
 import sys
 import time
 
+from binascii import crc32
+
 ###############################################################################
 
 ## ************************* BASIC DATA STRUCTURES ****************************
@@ -106,38 +108,133 @@ class EntityA:
     # zero and seqnum_limit-1, inclusive.  E.g., if seqnum_limit is 16, then
     # all seqnums must be in the range 0-15.
     def __init__(self, seqnum_limit):
-        pass
+        self.OUTPUT = 0
+        self.INPUT  = 1
+        self.TIMER = 2
+
+        # How long to wait for ack?
+        self.WAIT_TIME = 10.0
+
+        # State
+        self.layer5_msgs = []
+        self.bit = 0
+        self.sent_pkt = None
+        self.handle_event = self.handle_event_wait_for_call
 
     # Called from layer 5, passed the data to be sent to other side.
     # The argument `message` is a Msg containing the data to be sent.
     def output(self, message):
-        pass
+        self.layer5_msgs.append(message)
+        self.handle_event(self.OUTPUT)
 
     # Called from layer 3, when a packet arrives for layer 4 at EntityA.
     # The argument `packet` is a Pkt containing the newly arrived packet.
     def input(self, packet):
-        pass
+        self.handle_event(self.INPUT, packet)
 
     # Called when A's timer goes off.
     def timer_interrupt(self):
+        self.handle_event(self.TIMER)
         pass
+
+    #####
+
+    def handle_event_wait_for_call(self, e, arg=None):
+        if e==self.OUTPUT:
+            if not self.layer5_msgs:
+                return
+            m = self.layer5_msgs.pop(0)
+            p = Pkt(self.bit, 0, 0, m.data)
+            pkt_insert_checksum(p)
+            to_layer3(self, p)
+            self.sent_pkt = p
+            start_timer(self, self.WAIT_TIME)
+            self.handle_event = self.handle_event_wait_for_ack
+
+        elif e==self.INPUT:
+            pass
+
+        elif e==self.TIMER:
+            if TRACE>0:
+                print('EntityA: ignoring unexpected timeout.')
+
+        else:
+            self.unknown_event(e)
+
+    def handle_event_wait_for_ack(self, e, arg=None):
+        if e==self.OUTPUT:
+            pass
+
+        elif e==self.INPUT:
+            p = arg
+            if (pkt_is_corrupt(p)
+                or p.acknum != self.bit):
+                return
+            stop_timer(self)
+            #
+            self.bit = 1 - self.bit
+            self.handle_event = self.handle_event_wait_for_call
+            self.handle_event(self.OUTPUT)
+
+        elif e==self.TIMER:
+            to_layer3(self, self.sent_pkt)
+            start_timer(self, self.WAIT_TIME)
+
+        else:
+            self.unknown_event(e)
+
+    #####
+
+    def self_unknown_event(self, e):
+        print(f'EntityA: ignoring unknown event {e}.')
+
+#####
 
 class EntityB:
     # The following method will be called once (only) before any other
     # EntityB methods are called.  You can use it to do any initialization.
     #
-    # See comment above `EntityA.__init__` for the meaning of seqnum_limit.
+    # See comment for the meaning of seqnum_limit.
     def __init__(self, seqnum_limit):
+        self.expecting_bit = 0
         pass
 
     # Called from layer 3, when a packet arrives for layer 4 at EntityB.
     # The argument `packet` is a Pkt containing the newly arrived packet.
     def input(self, packet):
-        pass
+        # print(f'B received: {packet}')
+        if (packet.seqnum != self.expecting_bit
+            or pkt_is_corrupt(packet)):
+            p = Pkt(0, 1-self.expecting_bit, 0, packet.payload)
+            pkt_insert_checksum(p)
+            to_layer3(self, p)
+        else:
+            to_layer5(self, Msg(packet.payload))
+            # Ack.
+            p = Pkt(0, self.expecting_bit, 0, packet.payload)
+            pkt_insert_checksum(p)
+            to_layer3(self, p)
+            #
+            self.expecting_bit = 1 - self.expecting_bit
 
     # Called when B's timer goes off.
     def timer_interrupt(self):
         pass
+
+#####
+
+def pkt_compute_checksum(packet):
+    crc = 0
+    crc = crc32(packet.seqnum.to_bytes(4, byteorder='big'), crc)
+    crc = crc32(packet.acknum.to_bytes(4, byteorder='big'), crc)
+    crc = crc32(packet.payload, crc)
+    return crc
+
+def pkt_insert_checksum(packet):
+    packet.checksum = pkt_compute_checksum(packet)
+
+def pkt_is_corrupt(packet):
+    return pkt_compute_checksum(packet) != packet.checksum
 
 ###############################################################################
 
