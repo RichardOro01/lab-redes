@@ -1,38 +1,38 @@
 ##
-## Python version of:
+# Python version of:
 ##
-## ****************************************************************************
-## ALTERNATING BIT AND GO-BACK-N NETWORK SIMULATOR: VERSION 1.1  J.F.Kurose
+# ****************************************************************************
+# ALTERNATING BIT AND GO-BACK-N NETWORK SIMULATOR: VERSION 1.1  J.F.Kurose
 ##
-## This code should be used for PA2, unidirectional data-transfer protocols
-## from A to B.
-## Network properties:
-##   - one-way network delay averages 5.0 time units (longer if there
-##     are other messages in the channel for GBN), but can be larger
-##   - packets can be corrupted (either the header or the data portion)
-##     or lost, according to user-defined probabilities
-##   - packets will be delivered in the order in which they were sent
-##     (although some can be lost).
-## ****************************************************************************
+# This code should be used for PA2, unidirectional data-transfer protocols
+# from A to B.
+# Network properties:
+# - one-way network delay averages 5.0 time units (longer if there
+# are other messages in the channel for GBN), but can be larger
+# - packets can be corrupted (either the header or the data portion)
+# or lost, according to user-defined probabilities
+# - packets will be delivered in the order in which they were sent
+# (although some can be lost).
+# ****************************************************************************
 ##
-## Python version by:
-## Eric Eide <eeide@cs.utah.edu>
-## University of Utah
-## March 2022
+# Python version by:
+# Eric Eide <eeide@cs.utah.edu>
+# University of Utah
+# March 2022
 ##
-## ==> STUDENTS: Implement the methods for EntityA and EntityB.
+# ==> STUDENTS: Implement the methods for EntityA and EntityB.
 ##
-## Run `python3 <thisfile.py> -h` in a terminal window to see the various
-## parameters that you can set for a run of this simulator.
+# Run `python3 <thisfile.py> -h` in a terminal window to see the various
+# parameters that you can set for a run of this simulator.
 ##
-## This program defines a variable `TRACE` that you can use to conditionally
-## print messages from your EntityA and EntityB methods.  For example:
+# This program defines a variable `TRACE` that you can use to conditionally
+# print messages from your EntityA and EntityB methods.  For example:
 ##
-##   if TRACE>0:
-##       print('A very important event just happened!')
+# if TRACE>0:
+# print('A very important event just happened!')
 ##
-## The value of `TRACE` is set by the `-v` command line option.  The default
-## value of `TRACE` is 0 (meaning "no tracing").
+# The value of `TRACE` is set by the `-v` command line option.  The default
+# value of `TRACE` is 0 (meaning "no tracing").
 ##
 
 import argparse
@@ -46,16 +46,18 @@ from binascii import crc32
 
 ###############################################################################
 
-## ************************* BASIC DATA STRUCTURES ****************************
+# ************************* BASIC DATA STRUCTURES ****************************
 ##
-## STUDENTS: Do not modify these definitions.
+# STUDENTS: Do not modify these definitions.
 ##
-## ****************************************************************************
+# ****************************************************************************
 
 # A Msg is the data unit passed from layer 5 (teacher's code) to layer 4
 # (student's code).  It contains the data (bytes) to be delivered to layer 5
 # via the student's transport-level protocol entities.
 #
+
+
 class Msg:
     MSG_SIZE = 20
 
@@ -69,6 +71,8 @@ class Msg:
 # (teacher's code).  Note the pre-defined packet structure, which all students
 # must follow.
 #
+
+
 class Pkt:
     def __init__(self, seqnum, acknum, checksum, payload):
         self.seqnum = seqnum            # type: integer
@@ -82,22 +86,23 @@ class Pkt:
 
 ###############################################################################
 
-## ***************** STUDENTS WRITE THE NEXT SEVEN METHODS ********************
+# ***************** STUDENTS WRITE THE NEXT SEVEN METHODS ********************
 ##
-## STUDENTS: When you implement these methods, use instance variables only!
-## I.e., variables that you access through `self' like `self.x`.  Do NOT use
-## global variables (a.k.a. module-scoped variables) or class variables.
+# STUDENTS: When you implement these methods, use instance variables only!
+# I.e., variables that you access through `self' like `self.x`.  Do NOT use
+# global variables (a.k.a. module-scoped variables) or class variables.
 ##
-## The reason for this restriction is the autograder, which may run several
-## simulations within a single Python process.  For each simulation, the
-## autograder will create a new instance of EntityA and a new instance of
-## EntityB.  If you use global variables and/or class variables in your
-## implmentations of EntityA and EntityB, then your code may not work properly
-## when run by the autograder, and you may LOSE POINTS!
+# The reason for this restriction is the autograder, which may run several
+# simulations within a single Python process.  For each simulation, the
+# autograder will create a new instance of EntityA and a new instance of
+# EntityB.  If you use global variables and/or class variables in your
+# implmentations of EntityA and EntityB, then your code may not work properly
+# when run by the autograder, and you may LOSE POINTS!
 ##
-## If you have any questions about this, please ask the teaching staff.
+# If you have any questions about this, please ask the teaching staff.
 ##
-## ****************************************************************************
+# ****************************************************************************
+
 
 class EntityA:
     # The following method will be called once (only) before any other
@@ -108,39 +113,62 @@ class EntityA:
     # zero and seqnum_limit-1, inclusive.  E.g., if seqnum_limit is 16, then
     # all seqnums must be in the range 0-15.
     def __init__(self, seqnum_limit):
-        self.OUTPUT = 0
-        self.INPUT  = 1
-        self.TIMER = 2
-
-        # How long to wait for ack?
-        self.WAIT_TIME = 10.0
-
-        # State
+        self._output = 0
+        self._input = 1
+        self.timer = 2
+        self.wait_time = 10.0
+        self.seqnum_limit = seqnum_limit
         self.layer5_msgs = []
         self.bit = 0
         self.sent_pkt = None
         self.handle_event = self.handle_event_wait_for_call
 
-    # Called from layer 5, passed the data to be sent to other side.
-    # The argument `message` is a Msg containing the data to be sent.
     def output(self, message):
+        """
+        Append the given message to the layer5_msgs list and handle the output event.
+        Parameters:
+            message (any): The message to be appended to the layer5_msgs list.
+        Returns:
+            None
+        """
         self.layer5_msgs.append(message)
-        self.handle_event(self.OUTPUT)
+        self.handle_event(self._output)
 
-    # Called from layer 3, when a packet arrives for layer 4 at EntityA.
-    # The argument `packet` is a Pkt containing the newly arrived packet.
     def input(self, packet):
-        self.handle_event(self.INPUT, packet)
+        """
+        Execute the input method.
+        Args:
+            packet: The packet to be processed.
+        Returns:
+            None.
+        """
+        self.handle_event(self._input, packet)
 
-    # Called when A's timer goes off.
     def timer_interrupt(self):
-        self.handle_event(self.TIMER)
-        pass
+        """
+        Execute the timer interrupt.
+        This function is called when the timer interrupt occurs. 
+        It will handle the timer event by invoking the handle_event 
+        method with the timer as the argument.
+        Parameters:
+            None
+        Returns:
+            None
+        """
+        self.handle_event(self.timer)
 
     #####
 
     def handle_event_wait_for_call(self, e, arg=None):
-        if e==self.OUTPUT:
+        """
+        Handles the event and waits for a call.
+
+        :param e: The event to handle.
+        :type e: any
+        :param arg: An optional argument.
+        :type arg: any
+        """
+        if e == self._output:
             if not self.layer5_msgs:
                 return
             m = self.layer5_msgs.pop(0)
@@ -148,63 +176,85 @@ class EntityA:
             pkt_insert_checksum(p)
             to_layer3(self, p)
             self.sent_pkt = p
-            start_timer(self, self.WAIT_TIME)
+            start_timer(self, self.wait_time)
             self.handle_event = self.handle_event_wait_for_ack
 
-        elif e==self.INPUT:
+        elif e == self._input:
             pass
 
-        elif e==self.TIMER:
-            if TRACE>0:
+        elif e == self.timer:
+            if TRACE > 0:
                 print('EntityA: ignoring unexpected timeout.')
 
         else:
             self.unknown_event(e)
 
     def handle_event_wait_for_ack(self, e, arg=None):
-        if e==self.OUTPUT:
+        """
+        Handles the event and waits for acknowledgement.
+
+        Args:
+            e: The event to handle.
+            arg: Additional argument for the event (default: None).
+
+        Returns:
+            None.
+        """
+        if e == self._output:
             pass
 
-        elif e==self.INPUT:
+        elif e == self._input:
             p = arg
             if (pkt_is_corrupt(p)
-                or p.acknum != self.bit):
+                    or p.acknum != self.bit):
                 return
             stop_timer(self)
             #
             self.bit = 1 - self.bit
             self.handle_event = self.handle_event_wait_for_call
-            self.handle_event(self.OUTPUT)
+            self.handle_event(self._output)
 
-        elif e==self.TIMER:
+        elif e == self.timer:
             to_layer3(self, self.sent_pkt)
-            start_timer(self, self.WAIT_TIME)
+            start_timer(self, self.wait_time)
 
         else:
             self.unknown_event(e)
 
     #####
 
-    def self_unknown_event(self, e):
+    def unknown_event(self, e):
+        """
+        Handle unknown event.
+        Args:
+            e: The unknown event.
+        Returns:
+            None
+        """
         print(f'EntityA: ignoring unknown event {e}.')
 
 #####
+
 
 class EntityB:
     # The following method will be called once (only) before any other
     # EntityB methods are called.  You can use it to do any initialization.
     #
     # See comment for the meaning of seqnum_limit.
-    def __init__(self, seqnum_limit):
+    def __init__(self, limit):
         self.expecting_bit = 0
-        pass
+        self.limit = limit
 
-    # Called from layer 3, when a packet arrives for layer 4 at EntityB.
-    # The argument `packet` is a Pkt containing the newly arrived packet.
     def input(self, packet):
-        # print(f'B received: {packet}')
+        """
+        Handles the input packet received by the protocol.
+        Parameters:
+            packet (Packet): The packet to be processed.
+        Returns:
+            None
+        """
         if (packet.seqnum != self.expecting_bit
-            or pkt_is_corrupt(packet)):
+                or pkt_is_corrupt(packet)):
             p = Pkt(0, 1-self.expecting_bit, 0, packet.payload)
             pkt_insert_checksum(p)
             to_layer3(self, p)
@@ -217,11 +267,13 @@ class EntityB:
             #
             self.expecting_bit = 1 - self.expecting_bit
 
-    # Called when B's timer goes off.
     def timer_interrupt(self):
-        pass
+        """
+        TODO: Write a description of the entire function, its parameters, and its return types.
+        """
 
 #####
+
 
 def pkt_compute_checksum(packet):
     crc = 0
@@ -230,71 +282,80 @@ def pkt_compute_checksum(packet):
     crc = crc32(packet.payload, crc)
     return crc
 
+
 def pkt_insert_checksum(packet):
     packet.checksum = pkt_compute_checksum(packet)
+
 
 def pkt_is_corrupt(packet):
     return pkt_compute_checksum(packet) != packet.checksum
 
 ###############################################################################
 
-## ********************** STUDENT-CALLABLE FUNCTIONS **************************
+# ********************** STUDENT-CALLABLE FUNCTIONS **************************
 ##
-## STUDENTS: These are functions that should be called from your EntityA and
-## EntityB methods.
+# STUDENTS: These are functions that should be called from your EntityA and
+# EntityB methods.
 ##
-## The first argument to each of these student-callable functions is the object
-## that is invoking the function.  Within an EntityA or EntityB method, that
-## object is available as `self`.  For example, to start a timer in one of your
-## entity methods, you would do something like:
+# The first argument to each of these student-callable functions is the object
+# that is invoking the function.  Within an EntityA or EntityB method, that
+# object is available as `self`.  For example, to start a timer in one of your
+# entity methods, you would do something like:
 ##
-##   start_timer(self, 10.0) # Start a timer that will go off in 10 time units.
+# start_timer(self, 10.0) # Start a timer that will go off in 10 time units.
 ##
-## Or to send a packet to layer3, you would do something like:
+# Or to send a packet to layer3, you would do something like:
 ##
-##   to_layer3(self, Pkt(...)) # Construct a Pkt and send it to layer3.
+# to_layer3(self, Pkt(...)) # Construct a Pkt and send it to layer3.
 ##
-## ****************************************************************************
+# ****************************************************************************
+
 
 def start_timer(calling_entity, increment):
     the_sim.start_timer(calling_entity, increment)
 
+
 def stop_timer(calling_entity):
     the_sim.stop_timer(calling_entity)
+
 
 def to_layer3(calling_entity, packet):
     the_sim.to_layer3(calling_entity, packet)
 
+
 def to_layer5(calling_entity, message):
     the_sim.to_layer5(calling_entity, message)
+
 
 def get_time(calling_entity):
     return the_sim.get_time(calling_entity)
 
 ###############################################################################
 
-## ****************************************************************************
-## ***************** NETWORK SIMULATION CODE STARTS BELOW *********************
+# ****************************************************************************
+# ***************** NETWORK SIMULATION CODE STARTS BELOW *********************
 ##
-## The code below simulates the layer 3 and below network environment:
-##   - simulates the tranmission and delivery (possibly with bit-level
-##     corruption and packet loss) of packets across the layer 3/4 interface
-##   - handles the starting/stopping of a timer, and generates timer
-##     interrupts (resulting in calling student's timer handler).
-##   - generates message to be sent (passed from later 5 to 4)
+# The code below simulates the layer 3 and below network environment:
+# - simulates the tranmission and delivery (possibly with bit-level
+# corruption and packet loss) of packets across the layer 3/4 interface
+# - handles the starting/stopping of a timer, and generates timer
+# interrupts (resulting in calling student's timer handler).
+# - generates message to be sent (passed from later 5 to 4)
 ##
-## THERE IS NO REASON THAT ANY STUDENT SHOULD HAVE TO READ OR UNDERSTAND
-## THE CODE BELOW.  YOU SHOULD NOT TOUCH OR REFERENCE (in your code) ANY
-## OF THE DATA STRUCTURES BELOW.  If you're interested in how I designed
-## the simulator, you're welcome to look at the code - but again, you should
-## not have to, and you definitely should not have to modify.
+# THERE IS NO REASON THAT ANY STUDENT SHOULD HAVE TO READ OR UNDERSTAND
+# THE CODE BELOW.  YOU SHOULD NOT TOUCH OR REFERENCE (in your code) ANY
+# OF THE DATA STRUCTURES BELOW.  If you're interested in how I designed
+# the simulator, you're welcome to look at the code - but again, you should
+# not have to, and you definitely should not have to modify.
 ##
-## ****************************************************************************
+# ****************************************************************************
+
 
 class EventType(Enum):
-    TIMER_INTERRUPT = auto()
+    timer_INTERRUPT = auto()
     FROM_LAYER5 = auto()
     FROM_LAYER3 = auto()
+
 
 class Event:
     def __init__(self, ev_time, ev_type, ev_entity, packet=None):
@@ -303,26 +364,27 @@ class Event:
         self.ev_entity = ev_entity  # EntityA or EntityB
         self.packet = packet        # Pkt or None
 
+
 class Simulator:
     def __init__(self, options, cbA=None, cbB=None):
-        self.n_sim                = 0
-        self.n_sim_max            = options.num_msgs
-        self.time                 = 0.000
-        self.interarrival_time    = options.interarrival_time
-        self.loss_prob            = options.loss_prob
-        self.corrupt_prob         = options.corrupt_prob
-        self.seqnum_limit         = options.seqnum_limit
-        self.n_to_layer3_A        = 0
-        self.n_to_layer3_B        = 0
-        self.n_lost               = 0
-        self.n_corrupt            = 0
-        self.n_to_layer5_A        = 0
-        self.n_to_layer5_B        = 0
+        self.n_sim = 0
+        self.n_sim_max = options.num_msgs
+        self.time = 0.000
+        self.interarrival_time = options.interarrival_time
+        self.loss_prob = options.loss_prob
+        self.corrupt_prob = options.corrupt_prob
+        self.seqnum_limit = options.seqnum_limit
+        self.n_to_layer3_A = 0
+        self.n_to_layer3_B = 0
+        self.n_lost = 0
+        self.n_corrupt = 0
+        self.n_to_layer5_A = 0
+        self.n_to_layer5_B = 0
 
         if options.random_seed is None:
-            self.random_seed      = time.time_ns()
+            self.random_seed = time.time_ns()
         else:
-            self.random_seed      = options.random_seed
+            self.random_seed = options.random_seed
         random.seed(self.random_seed)
 
         if self.seqnum_limit < 2:
@@ -331,34 +393,34 @@ class Simulator:
             # How many bits to represent integers in [0, seqnum_limit-1]?
             self.seqnum_limit_n_bits = (self.seqnum_limit-1).bit_length()
 
-        self.trace                = options.trace
+        self.trace = options.trace
         self.to_layer5_callback_A = cbA
         self.to_layer5_callback_B = cbB
 
-        self.entity_A             = EntityA(self.seqnum_limit)
-        self.entity_B             = EntityB(self.seqnum_limit)
-        self.event_list           = []
+        self.entity_A = EntityA(self.seqnum_limit)
+        self.entity_B = EntityB(self.seqnum_limit)
+        self.event_list = []
 
     def get_stats(self):
-        stats = {'n_sim'             : self.n_sim,
-                 'n_sim_max'         : self.n_sim_max,
-                 'time'              : self.time,
-                 'interarrival_time' : self.interarrival_time,
-                 'loss_prob'         : self.loss_prob,
-                 'corrupt_prob'      : self.corrupt_prob,
-                 'seqnum_limit'      : self.seqnum_limit,
-                 'random_seed'       : self.random_seed,
-                 'n_to_layer3_A'     : self.n_to_layer3_A,
-                 'n_to_layer3_B'     : self.n_to_layer3_B,
-                 'n_lost'            : self.n_lost,
-                 'n_corrupt'         : self.n_corrupt,
-                 'n_to_layer5_A'     : self.n_to_layer5_A,
-                 'n_to_layer5_B'     : self.n_to_layer5_B
-        }
+        stats = {'n_sim': self.n_sim,
+                 'n_sim_max': self.n_sim_max,
+                 'time': self.time,
+                 'interarrival_time': self.interarrival_time,
+                 'loss_prob': self.loss_prob,
+                 'corrupt_prob': self.corrupt_prob,
+                 'seqnum_limit': self.seqnum_limit,
+                 'random_seed': self.random_seed,
+                 'n_to_layer3_A': self.n_to_layer3_A,
+                 'n_to_layer3_B': self.n_to_layer3_B,
+                 'n_lost': self.n_lost,
+                 'n_corrupt': self.n_corrupt,
+                 'n_to_layer5_A': self.n_to_layer5_A,
+                 'n_to_layer5_B': self.n_to_layer5_B
+                 }
         return stats
 
     def run(self):
-        if self.trace>0:
+        if self.trace > 0:
             print('\n===== SIMULATION BEGINS')
 
         self._generate_next_arrival()
@@ -366,9 +428,9 @@ class Simulator:
         while (self.event_list
                and self.n_sim < self.n_sim_max):
             ev = self.event_list.pop(0)
-            if self.trace>2:
+            if self.trace > 2:
                 print(f'\nEVENT time: {ev.ev_time}, ', end='')
-                if ev.ev_type == EventType.TIMER_INTERRUPT:
+                if ev.ev_type == EventType.timer_INTERRUPT:
                     print(f'timer_interrupt, ', end='')
                 elif ev.ev_type == EventType.FROM_LAYER5:
                     print(f'from_layer5, ', end='')
@@ -384,7 +446,7 @@ class Simulator:
                 self._generate_next_arrival()
                 j = self.n_sim % 26
                 m = bytes([97+j for i in range(Msg.MSG_SIZE)])
-                if self.trace>2:
+                if self.trace > 2:
                     print(f'          MAINLOOP: data given to student: {m}')
                 self.n_sim += 1
                 ev.ev_entity.output(Msg(m))
@@ -392,19 +454,20 @@ class Simulator:
             elif ev.ev_type == EventType.FROM_LAYER3:
                 ev.ev_entity.input(deepcopy(ev.packet))
 
-            elif ev.ev_type == EventType.TIMER_INTERRUPT:
+            elif ev.ev_type == EventType.timer_INTERRUPT:
                 ev.ev_entity.timer_interrupt()
 
             else:
                 print('INTERNAL ERROR: unknown event type; event ignored.')
 
-        if self.trace>0:
+        if self.trace > 0:
             print('===== SIMULATION ENDS')
 
     def _insert_event(self, event):
-        if self.trace>2:
+        if self.trace > 2:
             print(f'            INSERTEVENT: time is {self.time}')
-            print(f'            INSERTEVENT: future time will be {event.ev_time}')
+            print(
+                f'            INSERTEVENT: future time will be {event.ev_time}')
         # Python 3.10+: use the bisect module:
         # insort(self.event_list, event, key=lambda e: e.ev_time)
         i = 0
@@ -414,7 +477,7 @@ class Simulator:
         self.event_list.insert(i, event)
 
     def _generate_next_arrival(self):
-        if self.trace>2:
+        if self.trace > 2:
             print('          GENERATE NEXT ARRIVAL: creating new arrival')
 
         x = self.interarrival_time * 2.0 * random.random()
@@ -425,7 +488,7 @@ class Simulator:
 
     def _valid_entity(self, e, method_name):
         if (e is self.entity_A
-            or e is self.entity_B):
+                or e is self.entity_B):
             return True
         print(f'''WARNING: entity in call to `{method_name}` is invalid!
   Invalid entity: {e}
@@ -434,7 +497,7 @@ class Simulator:
 
     def _valid_increment(self, i, method_name):
         if ((type(i) is int or type(i) is float)
-            and i >= 0.0):
+                and i >= 0.0):
             return True
         print(f'''WARNING: increment in call to `{method_name}` is invalid!
   Invalid increment: {i}
@@ -444,7 +507,7 @@ class Simulator:
     def _valid_message(self, m, method_name):
         if (type(m) is Msg
             and type(m.data) is bytes
-            and len(m.data) == Msg.MSG_SIZE):
+                and len(m.data) == Msg.MSG_SIZE):
             return True
         print(f'''WARNING: message in call to `{method_name}` is invalid!
   Invalid message: {m}
@@ -459,11 +522,11 @@ class Simulator:
             and 0 <= p.acknum < self.seqnum_limit
             and type(p.checksum) is int
             and type(p.payload) is bytes
-            and len(p.payload) == Msg.MSG_SIZE):
+                and len(p.payload) == Msg.MSG_SIZE):
             return True
         # Issue special warnings for invalid seqnums and acknums.
         if (type(p.seqnum) is int
-            and not (0 <= p.seqnum < self.seqnum_limit)):
+                and not (0 <= p.seqnum < self.seqnum_limit)):
             print(f'''WARNING: seqnum in call to `{method_name}` is invalid!
   Invalid packet: {p}
   Call ignored.''')
@@ -486,29 +549,29 @@ class Simulator:
         if not self._valid_increment(increment, 'start_timer'):
             return
 
-        if self.trace>2:
-            print(f'          START TIMER: starting timer at {self.time}')
+        if self.trace > 2:
+            print(f'          START timer: starting timer at {self.time}')
 
         for e in self.event_list:
-            if (e.ev_type == EventType.TIMER_INTERRUPT
-                and e.ev_entity is entity):
+            if (e.ev_type == EventType.timer_INTERRUPT
+                    and e.ev_entity is entity):
                 print('WARNING: attempt to start a timer that is already started!')
                 return
 
-        ev = Event(self.time+increment, EventType.TIMER_INTERRUPT, entity)
+        ev = Event(self.time+increment, EventType.timer_INTERRUPT, entity)
         self._insert_event(ev)
 
     def stop_timer(self, entity):
         if not self._valid_entity(entity, 'stop_timer'):
             return
 
-        if self.trace>2:
-            print(f'          STOP TIMER: stopping timer at {self.time}')
+        if self.trace > 2:
+            print(f'          STOP timer: stopping timer at {self.time}')
 
         i = 0
         while i < len(self.event_list):
-            if (self.event_list[i].ev_type == EventType.TIMER_INTERRUPT
-                and self.event_list[i].ev_entity is entity):
+            if (self.event_list[i].ev_type == EventType.timer_INTERRUPT
+                    and self.event_list[i].ev_entity is entity):
                 break
             i += 1
         if i < len(self.event_list):
@@ -532,7 +595,7 @@ class Simulator:
         # Simulate losses.
         if random.random() < self.loss_prob:
             self.n_lost += 1
-            if self.trace>0:
+            if self.trace > 0:
                 print('          TO_LAYER3: packet being lost')
             return
 
@@ -546,7 +609,7 @@ class Simulator:
             self.n_corrupt += 1
             x = random.random()
             if (x < 0.75
-                or self.seqnum_limit_n_bits == 0):
+                    or self.seqnum_limit_n_bits == 0):
                 payload = b'Z' + payload[1:]
             elif x < 0.875:
                 # Flip a random bit in the seqnum.
@@ -561,7 +624,7 @@ class Simulator:
                 acknum ^= 2**random.randrange(self.seqnum_limit_n_bits)
                 # Kurose's simulator simply did:
                 # acknum = 999999
-            if self.trace>0:
+            if self.trace > 0:
                 print('          TO_LAYER3: packet being corrupted')
 
         # Compute the arrival time of packet at the other end.
@@ -571,13 +634,13 @@ class Simulator:
         last_time = self.time
         for e in self.event_list:
             if (e.ev_type == EventType.FROM_LAYER3
-                and e.ev_entity is receiver):
+                    and e.ev_entity is receiver):
                 last_time = e.ev_time
         arrival_time = last_time + 1.0 + 8.0*random.random()
 
         p = Pkt(seqnum, acknum, checksum, payload)
         ev = Event(arrival_time, EventType.FROM_LAYER3, receiver, p)
-        if self.trace>2:
+        if self.trace > 2:
             print('          TO_LAYER3: scheduling arrival on other side')
         self._insert_event(ev)
 
@@ -594,7 +657,7 @@ class Simulator:
             self.n_to_layer5_B += 1
             callback = self.to_layer5_callback_B
 
-        if self.trace>2:
+        if self.trace > 2:
             print(f'          TO_LAYER5: data received: {message.data}')
         if callback:
             callback(message.data)
@@ -606,9 +669,11 @@ class Simulator:
 
 ###############################################################################
 
+
 TRACE = 0
 
 the_sim = None
+
 
 def report_config():
     stats = the_sim.get_stats()
@@ -621,6 +686,7 @@ def report_config():
 (-c) layer3 packet corruption prob:     {stats['corrupt_prob']}
 (-s) simulation random seed:            {stats['random_seed']}
 --------------------------------------''')
+
 
 def report_results():
     stats = the_sim.get_stats()
@@ -643,6 +709,7 @@ def report_results():
 # layer5 msgs by B/elapsed time:  {tput}
 --------------------------------''')
 
+
 def main(options, cb_A=None, cb_B=None):
     global TRACE
     TRACE = options.trace
@@ -653,6 +720,7 @@ def main(options, cb_A=None, cb_B=None):
     the_sim.run()
 
 #####
+
 
 if __name__ == '__main__':
     desc = 'Run a simulation of a reliable data transport protocol.'
@@ -694,4 +762,4 @@ if __name__ == '__main__':
 
 ###############################################################################
 
-## End of program.
+# End of program.
